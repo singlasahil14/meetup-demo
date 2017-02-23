@@ -72,9 +72,11 @@ def loss_history(config):
     return conv1(config)
 
 def log_string(config, best_epoch, loss):
-    return 'Best config: {}\nBest epoch: {}, Best validation loss: {}\n\n'.format(config, best_epoch, loss)
+    return 'Config: {}\nBest epoch: {}, Best validation loss: {}\n'.format(
+           config, best_epoch, loss)
 
-def hyperparams_beamsearch(range_dict, get_loss_history, beam_size=3, num_configs=10):
+def hyperparams_beamsearch(range_dict, get_loss_history, beam_size=3, 
+                           num_configs=10):
     import time
     f1 = open('all_gen_configs', 'w+')
     f2 = open('best_gen_configs', 'w+')
@@ -85,26 +87,32 @@ def hyperparams_beamsearch(range_dict, get_loss_history, beam_size=3, num_config
     
     for key, max_value in range_dict.iteritems():
         points = np.sort(np.squeeze(np.asarray(sequencer.get(num_configs))))
-        print(points)
         if(key=='channel_shift_range' or key=='rotation_range'):
             values = np.int32(np.floor(points*(max_value+1)))
         else:
             values = points*max_value
-        print(values)
+        print('\n\nPrev configs: {}\nPrev losses: {}'.format(
+              prev_configs, prev_losses))
+        print('Key: {}\nValues: {}\n\n'.format(key, values.tolist()))
+        next_losses = []
+        next_configs = []
         for prev_config, prev_loss in zip(prev_configs, prev_losses):
             config = dict(prev_config)
             config.update({key:0})
 
             best_loss = min(prev_losses)
-            next_losses = [prev_loss]
-            next_configs = [config]
+            next_losses.append(prev_loss)
+            next_configs.append(dict(config))
             for i, value in enumerate(values):
                 config.update({key: value})
-                print(config)
+                print('Previous Config: {}\nPrevious validation loss: {}'.format(
+                      prev_config, prev_loss))
+                print('Key: {}\nValue: {}\nCurrent config: {}'.format(
+                      key, value, config))
                 start_time = time.time()
                 history = get_loss_history(DatagenConfig(config))
                 time_elapsed = time.time() - start_time
-                print('Epoch: {}, Time Elapsed: {}\n'.format(i, time_elapsed))
+                print('\nEpoch: {}, Time Elapsed: {}'.format(i, time_elapsed))
 
                 val_losses = np.asarray(history['val_loss'])
                 best_epoch = np.argmin(val_losses)
@@ -126,12 +134,15 @@ def hyperparams_beamsearch(range_dict, get_loss_history, beam_size=3, num_config
         indices_sort = next_losses.argsort()
         next_losses = next_losses.tolist()
         indices_sort = indices_sort.tolist()
-        prev_losses = [next_losses[index] for index in indices_sort[:beam_search]]
-        prev_configs = [next_configs[index] for index in indices_sort[:beam_search]]
+        prev_losses = [next_losses[index] 
+                       for index in indices_sort[:beam_size]]
+        prev_configs = [dict(next_configs[index]) 
+                        for index in indices_sort[:beam_size]]
 
     f1.close()
     f2.close()
 
-range_dict = {'width_shift_range': 0.5, 'height_shift_range': 0.5, 'rotation_range': 45,
-              'shear_range': 0.5, 'zoom_range': 0.5, 'channel_shift_range': 40}
+range_dict = {'width_shift_range': 0.5, 'height_shift_range': 0.5, 
+              'rotation_range': 45, 'shear_range': 0.5, 
+              'zoom_range': 0.5, 'channel_shift_range': 40}
 hyperparams_beamsearch(range_dict, loss_history)
